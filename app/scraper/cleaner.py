@@ -19,6 +19,9 @@ _BOILERPLATE_TAGS = ["script", "style", "noscript", "svg", "iframe", "form", "na
 # Se compara contra cada clase/id por separado y como "token" para no borrar
 # por accidente componentes de contenido (p. ej. "hero-header" con el título).
 _BOILERPLATE_HINTS = re.compile(r"(^|[-_])(cookies?|breadcrumbs?|navbar|footer|skip(-link)?|megamenu)([-_]|$)", re.I)
+_HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
+# Si trafilatura conserva menos de esta fracción de los encabezados de sección, se usa el fallback
+_MIN_HEADINGS_KEPT = 0.8
 
 
 @dataclass
@@ -68,6 +71,11 @@ class RemoveBoilerplateStep(CleaningStep):
     def process(self, ctx: CleaningContext) -> CleaningContext:
         soup = ctx.soup
         assert soup is not None
+        # Los títulos de los acordeones ("Requisitos", "Tarifas") son un <button> dentro
+        # de un encabezado: se conserva su texto en lugar de borrarlo con el resto de botones
+        for heading in soup(_HEADING_TAGS):
+            for button in heading("button"):
+                button.unwrap()
         for tag in soup(_BOILERPLATE_TAGS):
             tag.decompose()
         for tag in soup.find_all(True):
@@ -88,13 +96,15 @@ def _soup_to_markdown(soup: BeautifulSoup) -> str:
     """Fallback: texto estructurado conservando encabezados como Markdown."""
     root = soup.find("main") or soup.body or soup
     lines: list[str] = []
-    for el in root.find_all(["h1", "h2", "h3", "h4", "p", "li", "td", "th", "span", "div"]):
-        if el.name in ("div", "span") and el.find(["p", "div", "h1", "h2", "h3", "h4", "li", "span"]):
-            continue  # evitar duplicar contenedores
+    for el in root.find_all([*_HEADING_TAGS, "p", "li", "td", "th", "span", "div"]):
+        if el.name in ("div", "span") and (
+            el.find([*_HEADING_TAGS, "p", "div", "li", "span"]) or el.find_parent(_HEADING_TAGS)
+        ):
+            continue  # evitar duplicar contenedores y el texto de los encabezados
         text = el.get_text(" ", strip=True)
         if not text:
             continue
-        if el.name in ("h1", "h2", "h3", "h4"):
+        if el.name in _HEADING_TAGS:
             lines.append(f"{'#' * int(el.name[1])} {text}")
         elif el.name == "li":
             lines.append(f"- {text}")
@@ -103,9 +113,27 @@ def _soup_to_markdown(soup: BeautifulSoup) -> str:
     return "\n".join(lines)
 
 
+def _keeps_section_headings(extracted: str, fallback: str) -> bool:
+    """¿El texto de trafilatura conserva los encabezados de sección (h2-h6) del fallback?
+
+    En páginas hechas con componentes (líneas de tiempo, acordeones) trafilatura
+    suele quedarse con los párrafos y descartar los títulos, que son justo lo que
+    da contexto a cada chunk ("2004", "Requisitos").
+    """
+    headings = {
+        re.sub(r"\s+", " ", line.lstrip("# ")).lower()
+        for line in fallback.splitlines()
+        if line.startswith("##")
+    }
+    if len(headings) < 2:
+        return True
+    text = re.sub(r"\s+", " ", extracted).lower()
+    return sum(h in text for h in headings) / len(headings) >= _MIN_HEADINGS_KEPT
+
+
 class ExtractMainContentStep(CleaningStep):
-    """Usa trafilatura y, si se queda corto (páginas de producto con tarjetas),
-    recurre a una extracción propia con BeautifulSoup."""
+    """Usa trafilatura y, si se queda corto o pierde los encabezados (páginas de
+    producto con tarjetas), recurre a una extracción propia con BeautifulSoup."""
 
     def process(self, ctx: CleaningContext) -> CleaningContext:
         assert ctx.soup is not None
@@ -118,7 +146,8 @@ class ExtractMainContentStep(CleaningStep):
             include_comments=False,
             favor_recall=True,
         ) or ""
-        ctx.text = extracted if len(extracted) >= 0.4 * len(fallback) else fallback
+        use_extracted = len(extracted) >= 0.4 * len(fallback) and _keeps_section_headings(extracted, fallback)
+        ctx.text = extracted if use_extracted else fallback
         ctx.meta["extractor"] = "trafilatura" if ctx.text is extracted else "bs4"
         return ctx
 

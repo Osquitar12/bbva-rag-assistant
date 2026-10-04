@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from app.scraper.storage import CleanDocument
 
-_HEADING = re.compile(r"^(#{1,4})\s+(.*)$")
+_HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 _SEPARATORS = ["\n\n", "\n", ". ", " "]
 
 
@@ -29,15 +29,16 @@ class Chunk:
         return f"{head}\n{self.text}"
 
 
-def _split_by_headings(text: str) -> list[tuple[str, str]]:
-    sections: list[tuple[str, str]] = []
+def _split_by_headings(text: str) -> list[tuple[list[str], str]]:
+    """Devuelve (ruta de encabezados, cuerpo) por cada sección del documento."""
+    sections: list[tuple[list[str], str]] = []
     stack: list[str] = []
     buf: list[str] = []
 
     def flush() -> None:
         body = "\n".join(buf).strip()
         if body:
-            sections.append((" > ".join(stack), body))
+            sections.append((list(stack), body))
         buf.clear()
 
     for line in text.split("\n"):
@@ -50,6 +51,25 @@ def _split_by_headings(text: str) -> list[tuple[str, str]]:
             buf.append(line)
     flush()
     return sections
+
+
+def _merge_sections(
+    prev: tuple[list[str], str], cur: tuple[list[str], str]
+) -> tuple[list[str], str]:
+    """Une dos secciones bajo su ruta común, dejando en el texto el encabezado propio
+    de cada una. Así en una línea de tiempo cada año acompaña a su hito dentro del chunk."""
+    (prev_path, prev_body), (cur_path, cur_body) = prev, cur
+    common: list[str] = []
+    for a, b in zip(prev_path, cur_path):
+        if a != b:
+            break
+        common.append(a)
+
+    def render(path: list[str], body: str) -> str:
+        own = " > ".join(path[len(common):])
+        return f"{own}\n{body}" if own else body
+
+    return common, f"{render(prev_path, prev_body)}\n{render(cur_path, cur_body)}"
 
 
 def _recursive_split(text: str, size: int, separators: list[str]) -> list[str]:
@@ -98,17 +118,17 @@ class StructuralChunker:
 
     def split(self, doc: CleanDocument) -> list[Chunk]:
         chunks: list[Chunk] = []
-        sections = _split_by_headings(doc.text) or [("", doc.text)]
+        sections = _split_by_headings(doc.text) or [([], doc.text)]
         # Fusiona secciones muy pequeñas con la siguiente para no perder contexto
-        merged: list[tuple[str, str]] = []
-        for heading, body in sections:
+        merged: list[tuple[list[str], str]] = []
+        for section in sections:
             if merged and len(merged[-1][1]) < self.min_chars * 2:
-                prev_h, prev_b = merged.pop()
-                merged.append((prev_h or heading, f"{prev_b}\n{heading}\n{body}" if heading else f"{prev_b}\n{body}"))
+                merged.append(_merge_sections(merged.pop(), section))
             else:
-                merged.append((heading, body))
+                merged.append(section)
 
-        for heading, body in merged:
+        for path, body in merged:
+            heading = " > ".join(path)
             pieces = _with_overlap(_recursive_split(body, self.chunk_size, _SEPARATORS), self.chunk_overlap)
             for piece in pieces:
                 piece = piece.strip()

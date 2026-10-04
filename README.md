@@ -77,7 +77,7 @@ flowchart LR
 |---|---|
 | **Docker** + **Docker Compose v2.24+** | [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) o Docker Engine (Linux) |
 | **API key gratuita de Groq** | Créala en <https://console.groq.com/keys> (no requiere tarjeta) |
-| **Espacio en disco** | ~3 GB: imagen (~1 GB) + embeddings (~0.2 GB) + reranker (~1.1 GB). Con `RERANKER_ENABLED=false` son ~1.5 GB |
+| **Espacio en disco** | ~4 GB: imagen con Chromium (~2,4 GB) + embeddings (~0.2 GB) + reranker (~1.1 GB). Con `RERANKER_ENABLED=false` son ~3 GB |
 | **Internet** | Para scrapear el sitio, descargar modelos la primera vez y llamar a Groq |
 
 > ¿Prefieres no depender de ninguna API? Puedes usar **Ollama** 100 % local (ver [Configuración](#️-configuración-env)),
@@ -228,7 +228,7 @@ Todos los parámetros están externalizados (`app/config.py`, con `pydantic-sett
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `150` | Chunking (en caracteres) |
 | `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Modelo de embeddings |
 | `RETRIEVAL_TOP_K` / `RERANK_TOP_N` | `20` / `4` | Candidatos y contexto final |
-| `RERANKER_ENABLED` / `RERANKER_MODEL` | `true` / `jina-reranker-v2-base-multilingual` | Reranker |
+| `RERANKER_ENABLED` / `RERANKER_MODEL` | `true` / `jina-reranker-v2-base-multilingual` | Reranker cross-encoder. Con `false` se usa un reranker léxico ligero (`KeywordReranker`), sin modelo |
 | `MIN_RELEVANCE_SCORE` | vacío | Umbral opcional de score |
 | `MINUTES_SAVED_PER_ANSWER` | `4` | Supuesto para el cálculo de impacto |
 
@@ -246,8 +246,8 @@ docker compose exec ollama ollama pull qwen2.5:3b
 
 | Patrón | Tipo | Dónde | Por qué |
 |---|---|---|---|
-| **Strategy** | Comportamental | `rag/llm.py` (`LLMProvider` → `GroqLLM`, `OllamaLLM`), `rag/embeddings.py` (`EmbeddingProvider`), `rag/reranker.py` (`Reranker` → `CrossEncoderReranker`, `NoOpReranker`) | Cambiar de proveedor de LLM, embeddings o reranker sin tocar la lógica del RAG. Permite pasar de una API a un modelo local, apagar el reranker si falta disco e inyectar fakes en tests |
-| **Factory** | Creacional | `LLMFactory.create()`, `create_embedder()`, `create_reranker()` | Centraliza la construcción de la estrategia correcta según el `.env`. `LLMFactory` tiene registro extensible y `create_reranker` degrada a `NoOpReranker` si el modelo no carga |
+| **Strategy** | Comportamental | `rag/llm.py` (`LLMProvider` → `GroqLLM`, `OllamaLLM`), `rag/embeddings.py` (`EmbeddingProvider`), `rag/reranker.py` (`Reranker` → `CrossEncoderReranker`, `KeywordReranker`, `NoOpReranker`) | Cambiar de proveedor de LLM, embeddings o reranker sin tocar la lógica del RAG. Permite pasar de una API a un modelo local, apagar el reranker si falta disco e inyectar fakes en tests |
+| **Factory** | Creacional | `LLMFactory.create()`, `create_embedder()`, `create_reranker()` | Centraliza la construcción de la estrategia correcta según el `.env`. `LLMFactory` tiene registro extensible y `create_reranker` degrada a `KeywordReranker` si el modelo no carga |
 | **Repository** | Estructural / acceso a datos | `memory/repository.py` (`ConversationRepository` → `SQLAlchemyConversationRepository`) | El servicio RAG y la analítica no conocen SQL. Migrar de SQLite a Postgres es cambiar `DATABASE_URL`, y a Redis o Mongo, otra implementación |
 | **Facade** | Estructural | `rag/service.py` (`RAGService.ask()`) | Oculta la orquestación de historial, reformulación, búsqueda, reranking, LLM y persistencia detrás de un único método. API y UI no dependen de los detalles |
 | **Chain of Responsibility** | Comportamental | `scraper/cleaner.py` (`CleaningStep.set_next()`) | La limpieza del HTML es una cadena de pasos independientes (metadatos → boilerplate → contenido → espacios → duplicados). Se pueden añadir o reordenar pasos sin modificar los demás |
@@ -265,7 +265,7 @@ lo que hace testeable todo el flujo con fakes.
 | Lenguaje | **Python 3.12** | Requisito; ecosistema ML |
 | Descubrimiento de URLs | **sitemap.xml** + `urllib.robotparser` | El sitio publica un sitemap completo (~700 URLs), así que no hace falta un crawler. Es más rápido y más respetuoso, y aporta `lastmod` |
 | Descarga | **Playwright** (Chromium headless) + **tenacity** | El WAF del sitio responde 403 a clientes HTTP que no son un navegador (httpx, curl), así que las páginas se piden con Chromium. Concurrencia limitada con semáforo, pausas entre peticiones y reintentos exponenciales ante 429/5xx. Con `SCRAPE_FETCHER=http` se usa httpx puro |
-| Extracción | **trafilatura** + **BeautifulSoup** | trafilatura es muy buena extrayendo el contenido principal de artículos; para páginas de producto basadas en componentes hay un fallback BS4. Se conservan los encabezados en Markdown para un chunking estructural |
+| Extracción | **trafilatura** + **BeautifulSoup** | trafilatura es muy buena extrayendo el contenido principal de artículos; para páginas de producto basadas en componentes hay un fallback BS4, que también se usa cuando trafilatura pierde los encabezados de sección (años de una línea de tiempo, títulos de acordeones como "Requisitos"). Se conservan los encabezados en Markdown para un chunking estructural |
 | Chunking | Propio: **por encabezados + recursivo** | Los chunks respetan secciones como "Beneficios" o "Requisitos", y cada uno lleva título y encabezado para dar contexto al embedding |
 | Embeddings | **fastembed** + `paraphrase-multilingual-MiniLM-L12-v2` | **Multilingüe** (el contenido es en español), ligero (220 MB, 384 dim) y en **ONNX sin PyTorch**, lo que ahorra ~2 GB en la imagen |
 | Vector DB | **Qdrant** (self-hosted) | Open source, gratis, rápido, con dashboard y filtros por payload. Corre como un servicio más del compose |

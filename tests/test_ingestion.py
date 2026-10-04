@@ -23,6 +23,20 @@ def test_chunker_respects_size_and_headings():
     assert [c.id for c in chunks] == [c.id for c in again]
 
 
+def test_short_sections_keep_their_own_heading_when_merged():
+    text = (
+        "# Historia\n## Línea de tiempo\n"
+        "### 1999\nBBV se fusiona con Argentaria.\n"
+        "### 2004\nLa entidad pasa a llamarse BBVA Colombia.\n"
+        "##### Requisitos\n" + "Debes ser mayor de edad y tener cédula de ciudadanía colombiana. " * 3
+    )
+    chunks = StructuralChunker(chunk_size=500, chunk_overlap=50, min_chars=20).split(_doc(text))
+    timeline = next(c for c in chunks if "2004" in c.text)
+    assert timeline.heading == "Historia > Línea de tiempo"
+    assert "1999\nBBV se fusiona con Argentaria.\n2004\nLa entidad pasa a llamarse BBVA Colombia." in timeline.text
+    assert any(c.heading.endswith("Requisitos") for c in chunks)  # h5 también es sección
+
+
 def test_overlap_shares_text_between_consecutive_chunks():
     text = " ".join(f"palabra{i}" for i in range(400))
     chunks = StructuralChunker(chunk_size=300, chunk_overlap=60, min_chars=10).split(_doc(text))

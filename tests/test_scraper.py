@@ -72,6 +72,22 @@ def test_cleaner_removes_boilerplate_and_keeps_content():
     assert doc.section == "personas/productos/tarjetas"
 
 
+def test_cleaner_keeps_timeline_and_accordion_headings():
+    paragraph = "BBVA acompaña a sus clientes con productos y servicios financieros en todo el país. " * 3
+    html = f"""<html><head><title>Historia | BBVA Colombia</title></head><body><main>
+      <h1>Historia de BBVA en Colombia</h1><p>{paragraph}</p>
+      <div class="infographics"><h3>1996</h3><div class="rte">BBV adquiere acciones del Banco Ganadero.</div></div>
+      <div class="infographics"><h3>2004</h3><div class="rte">La entidad pasa a llamarse BBVA Colombia.</div></div>
+      <div class="accordion"><h5><button type="button"><span>Requisitos</span></button></h5>
+        <div class="hidden"><p>Ser mayor de edad y presentar tu documento de identidad.</p></div></div>
+      <button type="button">Solicitar ahora</button>
+    </main></body></html>"""
+    text = HTMLCleaner().clean("https://www.bbva.com.co/personas/historia.html", html).text
+    assert "### 2004\nLa entidad pasa a llamarse BBVA Colombia." in text
+    assert "##### Requisitos\nSer mayor de edad" in text
+    assert "Solicitar ahora" not in text
+
+
 def test_section_and_slug():
     assert section_from_url("https://x.co/") == "home"
     assert url_to_slug(URL) != url_to_slug(URL + "?a")
