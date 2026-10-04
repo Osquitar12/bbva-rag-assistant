@@ -65,20 +65,32 @@ def main() -> None:
     args = parser.parse_args()
     s = get_settings()
 
-    if args.all:
-        from app.scraper.run import run_scraping
+    try:
+        if args.all:
+            from app.scraper.run import run_scraping
 
-        run_scraping()
+            run_scraping()
 
-    store = QdrantVectorStore.from_url(s.qdrant_url, s.qdrant_collection)
-    wait_for_qdrant(store)
-    index_documents(
-        LocalStorage(s.raw_dir, s.clean_dir),
-        StructuralChunker(s.chunk_size, s.chunk_overlap, s.chunk_min_chars),
-        create_embedder(s),
-        store,
-        reindex=args.reindex or s.reindex,
-    )
+        store = QdrantVectorStore.from_url(s.qdrant_url, s.qdrant_collection)
+        wait_for_qdrant(store)
+        index_documents(
+            LocalStorage(s.raw_dir, s.clean_dir),
+            StructuralChunker(s.chunk_size, s.chunk_overlap, s.chunk_min_chars),
+            create_embedder(s),
+            store,
+            reindex=args.reindex or s.reindex,
+        )
+        if args.all and s.reranker_enabled:
+            # Precarga (descarga) el reranker para que la API arranque rápido
+            from app.rag.reranker import create_reranker
+
+            create_reranker(s)
+    except Exception:
+        # En modo --all (docker compose) no bloqueamos el arranque de la API:
+        # el error queda en el log y /health mostrará 0 vectores.
+        logger.exception("La ingesta falló")
+        if not args.all:
+            raise
 
 
 if __name__ == "__main__":
