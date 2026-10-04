@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     scrape_concurrency: int = 4
     scrape_delay_seconds: float = 0.5
     scrape_timeout_seconds: float = 20.0
-    scrape_user_agent: str = "BBVA-RAG-Assessment-Bot/1.0 (+uso academico)"
+    # UA de navegador + identificador propio: algunos WAF bloquean UAs no estándar
+    scrape_user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/126.0 Safari/537.36 BBVA-RAG-Assessment/1.0"
+    )
     # Patrones de URL (substring) a incluir / excluir, separados por coma
     scrape_include_patterns: str = ""
     scrape_exclude_patterns: str = "/investor-relations/,/herramientas/,/landing/formulario"

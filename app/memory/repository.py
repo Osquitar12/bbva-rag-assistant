@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -92,8 +92,6 @@ class SQLAlchemyConversationRepository(ConversationRepository):
             else:
                 Path(database_url.replace("sqlite:///", "")).parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(database_url, **kwargs)
-        if database_url.startswith("sqlite"):
-            event.listen(self.engine, "connect", lambda c, _: c.execute("PRAGMA journal_mode=WAL"))
         Base.metadata.create_all(self.engine)
         self._sessions = sessionmaker(self.engine, expire_on_commit=False)
 
