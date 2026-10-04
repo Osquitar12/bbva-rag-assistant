@@ -333,6 +333,9 @@ streamlit run app/ui/streamlit_app.py
   lo que el scraper usa Chromium headless con un User-Agent identificable. Se sigue respetando
   `robots.txt`, la concurrencia limitada y las pausas entre peticiones, y se guarda el HTML que
   envía el servidor (no el DOM renderizado).
+- **Bloques repetidos entre páginas:** el sitio repite los mismos bloques (preguntas frecuentes,
+  "También te puede interesar") en cientos de páginas. Al indexar se conserva una sola copia de
+  cada chunk repetido (la de la URL más corta) para que no copen los resultados de la búsqueda.
 - **Usuarios internos:** el asistente no maneja datos de clientes. Solo usa información pública
   del sitio, así que no se implementó autenticación.
 - **"Respondida" vs. "sin respuesta":** se detecta por la frase fija que el prompt obliga a usar

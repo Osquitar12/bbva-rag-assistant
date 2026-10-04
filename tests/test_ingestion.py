@@ -1,6 +1,6 @@
 from qdrant_client import QdrantClient
 
-from app.ingestion.chunker import StructuralChunker
+from app.ingestion.chunker import StructuralChunker, drop_repeated_chunks
 from app.ingestion.run import index_documents
 from app.rag.vectorstore import QdrantVectorStore
 from app.scraper.storage import CleanDocument, LocalStorage
@@ -35,6 +35,22 @@ def test_short_sections_keep_their_own_heading_when_merged():
     assert timeline.heading == "Historia > Línea de tiempo"
     assert "1999\nBBV se fusiona con Argentaria.\n2004\nLa entidad pasa a llamarse BBVA Colombia." in timeline.text
     assert any(c.heading.endswith("Requisitos") for c in chunks)  # h5 también es sección
+
+
+def test_drop_repeated_chunks_keeps_one_copy_from_shortest_url():
+    faq = "## Preguntas frecuentes\nPuedes solicitar tu tarjeta de crédito en la página web o en una oficina BBVA."
+    chunker = StructuralChunker(500, 50, 10)
+    chunks = [
+        c
+        for url, own in [
+            ("https://x.co/tarjetas/beneficios/promo-larga.html", "Descuento del 20 % en la tienda aliada."),
+            ("https://x.co/tarjetas.html", "Conoce todas las tarjetas de crédito de BBVA."),
+        ]
+        for c in chunker.split(_doc(f"# Página\n{own} Texto propio suficiente para ser una sección.\n{faq}", url))
+    ]
+    kept = drop_repeated_chunks(chunks)
+    assert len(chunks) == 4 and len(kept) == 3
+    assert [c.url for c in kept if "solicitar tu tarjeta" in c.text] == ["https://x.co/tarjetas.html"]
 
 
 def test_overlap_shares_text_between_consecutive_chunks():

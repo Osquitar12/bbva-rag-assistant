@@ -10,7 +10,7 @@ import logging
 import time
 
 from app.config import get_settings
-from app.ingestion.chunker import StructuralChunker
+from app.ingestion.chunker import StructuralChunker, drop_repeated_chunks
 from app.logging_config import setup_logging
 from app.rag.embeddings import EmbeddingProvider, create_embedder
 from app.rag.vectorstore import QdrantVectorStore
@@ -33,8 +33,12 @@ def index_documents(
     if not docs:
         logger.warning("No hay documentos limpios para indexar. Ejecuta primero el scraper.")
         return 0
-    chunks = [c for d in docs for c in chunker.split(d)]
-    logger.info("%d documentos -> %d chunks", len(docs), len(chunks))
+    all_chunks = [c for d in docs for c in chunker.split(d)]
+    chunks = drop_repeated_chunks(all_chunks)
+    logger.info(
+        "%d documentos -> %d chunks (%d repetidos entre páginas descartados)",
+        len(docs), len(chunks), len(all_chunks) - len(chunks),
+    )
     t0 = time.perf_counter()
     vectors = embedder.embed_documents([c.embedding_text for c in chunks])
     # La colección se recrea después de calcular los embeddings (lo lento), para que

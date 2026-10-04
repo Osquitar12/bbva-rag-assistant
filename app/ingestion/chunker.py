@@ -110,6 +110,24 @@ def _with_overlap(pieces: list[str], overlap: int) -> list[str]:
     return result
 
 
+def drop_repeated_chunks(chunks: list[Chunk]) -> list[Chunk]:
+    """Deja una sola copia de los chunks cuyo texto se repite entre páginas.
+
+    El sitio repite bloques enteros (preguntas frecuentes, "También te puede
+    interesar") en cientos de páginas; indexados tal cual, copan los resultados de
+    la búsqueda y dejan fuera la página que sí responde. Se conserva la copia de la
+    URL más corta, que suele ser la página más general.
+    """
+    best: dict[str, Chunk] = {}
+    for chunk in chunks:
+        key = re.sub(r"\s+", " ", chunk.text).strip().lower()
+        kept = best.get(key)
+        if kept is None or len(chunk.url) < len(kept.url):
+            best[key] = chunk
+    keep = {id(c) for c in best.values()}
+    return [c for c in chunks if id(c) in keep]
+
+
 class StructuralChunker:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 150, min_chars: int = 80):
         if chunk_overlap >= chunk_size:
