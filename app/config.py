@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # --- Scraping ---
     scrape_base_url: str = "https://www.bbva.com.co"
     scrape_sitemap_url: str = "https://www.bbva.com.co/sitemap.xml"
-    scrape_max_pages: int = 300
+    scrape_max_pages: int = 1300
     scrape_concurrency: int = 4
     scrape_delay_seconds: float = 0.5
     scrape_timeout_seconds: float = 20.0

@@ -100,7 +100,7 @@ cp .env.example .env          # en Windows (PowerShell): copy .env.example .env
 docker compose up --build
 ```
 
-**¿Qué ocurre en el primer arranque?** (≈ 5–10 min, según tu conexión)
+**¿Qué ocurre en el primer arranque?** (≈ 40 min en un portátil de 4 núcleos sin GPU; casi todo es el cálculo de embeddings. Con `SCRAPE_MAX_PAGES=300` son ≈ 12 min, solo con las páginas de productos)
 
 1. `qdrant` arranca la base vectorial.
 2. `ingest` lee el sitemap, descarga hasta `SCRAPE_MAX_PAGES` páginas (respetando `robots.txt`
@@ -219,7 +219,7 @@ Todos los parámetros están externalizados (`app/config.py`, con `pydantic-sett
 | `LLM_REASONING_EFFORT` | `low` | Esfuerzo de razonamiento de los modelos gpt-oss |
 | `HISTORY_WINDOW_N` | `6` | **N mensajes previos** usados como contexto |
 | `QUERY_REWRITE_ENABLED` | `true` | Reformulación de preguntas de seguimiento |
-| `SCRAPE_MAX_PAGES` | `300` | Límite de páginas a scrapear |
+| `SCRAPE_MAX_PAGES` | `1300` | Límite de páginas a scrapear (el sitemap tiene ~1.200 útiles) |
 | `SCRAPE_CONCURRENCY` / `SCRAPE_DELAY_SECONDS` | `4` / `0.5` | Cortesía con el servidor |
 | `SCRAPE_FETCHER` | `browser` | `browser` = Chromium headless (Playwright), `http` = httpx puro |
 | `SCRAPE_PRIORITY_PATTERNS` | `/productos/` | Rutas que se descargan primero cuando el sitemap supera `SCRAPE_MAX_PAGES` |
@@ -327,8 +327,8 @@ streamlit run app/ui/streamlit_app.py
 
 - **Alcance del scraping:** se usa el sitemap oficial y se excluyen `/investor-relations/` (duplicado
   en inglés de "Atención al inversionista"), `/herramientas/` y formularios (simuladores sin texto
-  útil). Se procesan como máximo 300 páginas por defecto para que el primer arranque sea razonable.
-  Con `SCRAPE_MAX_PAGES=1000` se cubre todo el sitio.
+  útil). Por defecto se procesa el sitemap completo (~1.200 páginas: productos, blog y contenido
+  institucional). Con `SCRAPE_MAX_PAGES=300` el primer arranque es más corto y cubre solo productos.
 - **Descarga con navegador:** el sitio bloquea (403) las peticiones de clientes HTTP simples, por
   lo que el scraper usa Chromium headless con un User-Agent identificable. Se sigue respetando
   `robots.txt`, la concurrencia limitada y las pausas entre peticiones, y se guarda el HTML que
