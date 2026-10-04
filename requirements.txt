@@ -9,5 +9,5 @@ trafilatura>=1.12
 sqlalchemy>=2.0,<3
 qdrant-client>=1.12,<2
 fastembed>=0.5,<1
-streamlit>=1.40,<2
+streamlit>=1.48,<2
 tenacity>=8.5,<10
