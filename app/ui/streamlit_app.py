@@ -53,7 +53,9 @@ def simple_table(rows: list[tuple], headers: tuple[str, str]) -> None:
     """Tabla en HTML puro (sin pandas)."""
     if not rows:
         return
-
+    head = "".join(f"<th style='text-align:left;padding:4px 8px;'>{html.escape(str(h))}</th>" for h in headers)
+    body = "".join(
+        "<tr>" + "".join(f"<td style='padding:4px 8px;'>{html.escape(str(c))}</td>" for c in row) + "</tr>"
         for row in rows
     )
     st.markdown(f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)
