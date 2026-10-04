@@ -37,31 +37,25 @@ class KeywordReranker(Reranker):
 
     name = "keyword"
 
-    def __init__(self, boost: float = 0.2):
+    def __init__(self, boost: float = 0.1):
         self.boost = boost
 
     def rerank(self, query, chunks, top_n):
         terms = set(tokenize(query))
         if not chunks or not terms:
             return NoOpReranker().rerank(query, chunks, top_n)
-        heads = [set(tokenize(c.heading)) for c in chunks]
-        bodies = [set(tokenize(c.text)) for c in chunks]
+        docs = [set(tokenize(f"{c.title}\n{c.heading}\n{c.text}")) for c in chunks]
         idf = {}
         for term in terms:
-            df = sum(term in head or term in body for head, body in zip(heads, bodies))
+            df = sum(term in doc for doc in docs)
             if df:  # un término que no está en ningún candidato no discrimina
-                idf[term] = math.log(1 + (len(chunks) - df + 0.5) / (df + 0.5))
+                idf[term] = math.log(1 + (len(docs) - df + 0.5) / (df + 0.5))
         total = sum(idf.values())
         if not total:
             return NoOpReranker().rerank(query, chunks, top_n)
-
-        def bonus(head: set[str], body: set[str]) -> float:
-            # Coincidir con el título de la sección pesa el doble que con el cuerpo
-            return sum(w * (2 if t in head else 1 if t in body else 0) for t, w in idf.items()) / total
-
         rescored = [
-            replace(c, score=c.score + self.boost * bonus(head, body))
-            for c, head, body in zip(chunks, heads, bodies)
+            replace(c, score=c.score + self.boost * sum(w for t, w in idf.items() if t in doc) / total)
+            for c, doc in zip(chunks, docs)
         ]
         return sorted(rescored, key=lambda c: c.score, reverse=True)[:top_n]
 
