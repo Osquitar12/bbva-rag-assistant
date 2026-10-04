@@ -4,6 +4,8 @@ __pycache__/
 .env
 .pytest_cache/
 .cache/
+.qdrant_bin/
+*.log
 data/raw/*
 data/clean/*
 data/*.db

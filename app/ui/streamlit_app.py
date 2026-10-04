@@ -5,7 +5,6 @@ import os
 import uuid
 
 import httpx
-import pandas as pd
 import streamlit as st
 
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
@@ -27,6 +26,37 @@ def api(method: str, path: str, **kwargs):
             detail = resp.text
         return None, f"Error {resp.status_code}: {detail}"
     return resp.json(), None
+
+
+def bar_list(items: list[tuple], max_label_width: int = 160) -> None:
+    """Barras horizontales en HTML puro (sin pandas, que no carga en este entorno)."""
+    if not items:
+        return
+    max_v = max((v for _, v in items), default=0) or 1
+    rows = []
+    for label, value in items:
+        pct = max(2, round(value / max_v * 100))
+        rows.append(
+            "<div style='display:flex;align-items:center;gap:8px;margin:4px 0;font-size:0.85em;'>"
+            f"<div style='width:{max_label_width}px;text-align:right;overflow:hidden;"
+            f"text-overflow:ellipsis;white-space:nowrap;' title='{label}'>{label}</div>"
+            "<div style='flex:1;background:rgba(127,127,127,0.2);border-radius:4px;'>"
+            f"<div style='background:#1f77b4;width:{pct}%;border-radius:4px;padding:2px 6px;"
+            f"color:white;white-space:nowrap;'>{value}</div></div></div>"
+        )
+    st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+def simple_table(rows: list[tuple], headers: tuple[str, str]) -> None:
+    """Tabla en HTML puro (sin pandas)."""
+    if not rows:
+        return
+    head = "".join(f"<th style='text-align:left;padding:4px 8px;'>{h}</th>" for h in headers)
+    body = "".join(
+        "<tr>" + "".join(f"<td style='padding:4px 8px;'>{c}</td>" for c in row) + "</tr>"
+        for row in rows
+    )
+    st.markdown(f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)
 
 
 def load_session(session_id: str) -> None:
@@ -158,19 +188,13 @@ with tab_metrics:
         left, right = st.columns(2)
         with left:
             st.subheader("Secciones del sitio más consultadas")
-            if c["top_sections"]:
-                st.bar_chart(pd.DataFrame(c["top_sections"], columns=["sección", "consultas"]).set_index("sección"),
-                             horizontal=True)
+            bar_list(c["top_sections"])
             st.subheader("Preguntas por hora del día")
-            st.bar_chart(pd.DataFrame(
-                {"preguntas": list(u["questions_by_hour"].values())},
-                index=[int(h) for h in u["questions_by_hour"]],
-            ))
+            hours = sorted(u["questions_by_hour"], key=int)
+            bar_list([(f"{h}h", u["questions_by_hour"][h]) for h in hours], max_label_width=50)
         with right:
             st.subheader("Términos más frecuentes")
-            if c["top_terms"]:
-                st.bar_chart(pd.DataFrame(c["top_terms"], columns=["término", "veces"]).set_index("término"),
-                             horizontal=True)
+            bar_list(c["top_terms"])
             st.subheader("Brechas de contenido (sin respuesta)")
             if g["unanswered_questions"]:
                 for qq in g["unanswered_questions"]:
@@ -178,4 +202,4 @@ with tab_metrics:
             else:
                 st.caption("Todas las preguntas tuvieron respuesta.")
         with st.expander("Páginas más citadas"):
-            st.dataframe(pd.DataFrame(c["top_urls"], columns=["URL", "citas"]), width="stretch")
+            simple_table(c["top_urls"], headers=("URL", "citas"))

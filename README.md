@@ -321,6 +321,19 @@ uvicorn app.api.main:app --reload
 streamlit run app/ui/streamlit_app.py
 ```
 
+### 🪟 Notas de ejecución en equipos corporativos Windows (sin Docker)
+
+Si corres el proyecto sin Docker en un equipo Windows con políticas corporativas restrictivas
+(Application Control / EDR), pueden aparecer estos obstáculos. **No aplican si usas Docker ni en
+equipos personales** — quedan documentados por si alguien reproduce ese entorno específico:
+
+| Problema | Causa | Solución |
+|---|---|---|
+| **`numpy`/`pandas` no cargan dentro de un `venv` del proyecto** (`ImportError: ... An Application Control policy has blocked this file`) | Políticas corporativas de Application Control (WDAC/EDR) pueden bloquear DLLs nativas ejecutadas desde una carpeta de proyecto recién creada, aunque el mismo paquete sí sea ejecutable desde una ubicación "de confianza" ya usada por el sistema | Instalar las dependencias a nivel de usuario global (`pip install --user -r requirements.txt`) en vez de un `venv` local. **No es una forma de saltarse ningún control de seguridad**, solo evita la carpeta bloqueada; si ni así carga, hay que pedir a TI que agregue una excepción |
+| **`pandas` sigue bloqueado incluso a nivel de usuario** (la pestaña de Métricas de Streamlit fallaba con `AttributeError: module 'pandas' has no attribute 'DataFrame'`) | El bloqueo de Application Control puede ser específico por archivo/firma, no solo por ruta: `numpy` pasó, pero `pandas._libs.interval` no | La pestaña de Métricas de `app/ui/streamlit_app.py` se reescribió sin depender de `pandas.DataFrame` (barras y tablas con `st.markdown` + HTML simple), así que funciona igual en equipos restringidos, personales y en Docker |
+| **Cada pregunta del chat tardaba ~7s en vez de ~3-4s** (solo corriendo fuera de Docker) | Bug clásico de Windows: resolver el hostname `localhost` intenta primero IPv6 (`::1`) antes de caer a IPv4, agregando ~2s fijos a cada llamada HTTP a Qdrant | Usar `QDRANT_URL=http://127.0.0.1:6333` en vez de `http://localhost:6333`. Dentro de `docker-compose` no aplica, porque los contenedores se comunican por nombre de servicio (`http://qdrant:6333`) |
+| **1 test falla en Windows** (`test_cleaner_removes_boilerplate_and_keeps_content`) | El fixture `tests/fixtures/product_page.html` no declara `<meta charset>`, y con ciertas versiones de `lxml` el parser de BeautifulSoup adivina mal la codificación de caracteres no ASCII (mojibake: `é` → `Ã©`) | No afecta los datos reales: se verificó directamente en Qdrant que los títulos scrapeados del sitio real (que sí declaran charset) quedan con acentos correctos. Pendiente como mejora menor: forzar `from_encoding="utf-8"` o inyectar el `<meta charset>` en `ExtractMetadataStep` |
+
 ---
 
 ## 📌 Supuestos y decisiones de diseño
