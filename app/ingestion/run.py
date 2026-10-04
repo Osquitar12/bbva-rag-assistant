@@ -35,12 +35,14 @@ def index_documents(
         return 0
     chunks = [c for d in docs for c in chunker.split(d)]
     logger.info("%d documentos -> %d chunks", len(docs), len(chunks))
+    t0 = time.perf_counter()
+    vectors = embedder.embed_documents([c.embedding_text for c in chunks])
+    # La colección se recrea después de calcular los embeddings (lo lento), para que
+    # una reindexación deje la API sin datos solo durante el upsert
     if reindex:
         store.recreate(embedder.dimension)
     else:
         store.ensure_collection(embedder.dimension)
-    t0 = time.perf_counter()
-    vectors = embedder.embed_documents([c.embedding_text for c in chunks])
     store.upsert(chunks, vectors)
     logger.info("Indexados %d chunks en %.1fs", len(chunks), time.perf_counter() - t0)
     return len(chunks)
