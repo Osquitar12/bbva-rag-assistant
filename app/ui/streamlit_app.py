@@ -1,6 +1,7 @@
 """UI minimalista: `streamlit run app/ui/streamlit_app.py`. Solo habla con la API REST."""
 from __future__ import annotations
 
+import html
 import os
 import uuid
 
@@ -35,6 +36,7 @@ def bar_list(items: list[tuple], max_label_width: int = 160) -> None:
     max_v = max((v for _, v in items), default=0) or 1
     rows = []
     for label, value in items:
+        label = html.escape(str(label), quote=True)  # el contenido viene de preguntas y del sitio
         pct = max(2, round(value / max_v * 100))
         rows.append(
             "<div style='display:flex;align-items:center;gap:8px;margin:4px 0;font-size:0.85em;'>"
@@ -51,9 +53,7 @@ def simple_table(rows: list[tuple], headers: tuple[str, str]) -> None:
     """Tabla en HTML puro (sin pandas)."""
     if not rows:
         return
-    head = "".join(f"<th style='text-align:left;padding:4px 8px;'>{h}</th>" for h in headers)
-    body = "".join(
-        "<tr>" + "".join(f"<td style='padding:4px 8px;'>{c}</td>" for c in row) + "</tr>"
+
         for row in rows
     )
     st.markdown(f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)

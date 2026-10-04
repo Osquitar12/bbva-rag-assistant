@@ -246,7 +246,7 @@ docker compose exec ollama ollama pull qwen2.5:3b
 
 | Patrón | Tipo | Dónde | Por qué |
 |---|---|---|---|
-| **Strategy** | Comportamental | `rag/llm.py` (`LLMProvider` → `GroqLLM`, `OllamaLLM`), `rag/embeddings.py` (`EmbeddingProvider`), `rag/reranker.py` (`Reranker` → `CrossEncoderReranker`, `KeywordReranker`, `NoOpReranker`) | Cambiar de proveedor de LLM, embeddings o reranker sin tocar la lógica del RAG. Permite pasar de una API a un modelo local, apagar el reranker si falta disco e inyectar fakes en tests |
+| **Strategy** | Comportamental | `rag/llm.py` (`LLMProvider` → `GroqLLM`, `OllamaLLM`), `rag/embeddings.py` (`EmbeddingProvider`), `rag/reranker.py` (`Reranker` → `CrossEncoderReranker`, `KeywordReranker`, `NoOpReranker`), `scraper/fetcher.py` (`BrowserFetcher` / `PageFetcher`, elegidos con `create_fetcher`) | Cambiar de proveedor de LLM, embeddings o reranker sin tocar la lógica del RAG. Permite pasar de una API a un modelo local, apagar el reranker si falta disco e inyectar fakes en tests |
 | **Factory** | Creacional | `LLMFactory.create()`, `create_embedder()`, `create_reranker()` | Centraliza la construcción de la estrategia correcta según el `.env`. `LLMFactory` tiene registro extensible y `create_reranker` degrada a `KeywordReranker` si el modelo no carga |
 | **Repository** | Estructural / acceso a datos | `memory/repository.py` (`ConversationRepository` → `SQLAlchemyConversationRepository`) | El servicio RAG y la analítica no conocen SQL. Migrar de SQLite a Postgres es cambiar `DATABASE_URL`, y a Redis o Mongo, otra implementación |
 | **Facade** | Estructural | `rag/service.py` (`RAGService.ask()`) | Oculta la orquestación de historial, reformulación, búsqueda, reranking, LLM y persistencia detrás de un único método. API y UI no dependen de los detalles |
@@ -276,7 +276,7 @@ lo que hace testeable todo el flujo con fakes.
 | API | **FastAPI** | Validación con Pydantic, documentación OpenAPI automática y testeable |
 | UI | **Streamlit** | UI de chat funcional y limpia en pocas líneas, con gráficos nativos para las métricas |
 | Config | **pydantic-settings** | `.env` tipado y validado |
-| Tests | **pytest** | 35 tests sin red: Qdrant en memoria, SQLite en memoria, `httpx.MockTransport` y embeddings/LLM falsos |
+| Tests | **pytest** | 39 tests sin red: Qdrant en memoria, SQLite en memoria, `httpx.MockTransport` y embeddings/LLM falsos |
 
 ---
 
@@ -294,7 +294,7 @@ lo que hace testeable todo el flujo con fakes.
 │   ├── api/main.py            # FastAPI
 │   └── ui/streamlit_app.py    # Streamlit
 ├── scripts/seed_demo.py       # conversaciones demo
-├── tests/                     # 32 tests (pytest)
+├── tests/                     # 39 tests (pytest)
 ├── data/raw/                  # HTML crudo + index.jsonl   (generado)
 ├── data/clean/                # JSON limpio por página     (generado)
 ├── Dockerfile · docker-compose.yml · .env.example · requirements.txt
@@ -377,8 +377,9 @@ equipos personales** — quedan documentados por si alguien reproduce ese entorn
   búsqueda híbrida con BM25.
 - **SQLite** no está pensado para alta concurrencia de escritura.
 - **Sin evaluación cuantitativa** de la calidad del RAG (por ejemplo RAGAS) por el tiempo disponible.
-- **Prueba del entorno:** el código se probó con 32 tests automatizados (sin red). El flujo
-  completo con Docker, el sitio real y Groq se valida al levantar el sistema.
+- **Cobertura de pruebas:** hay 39 tests automatizados (sin red) y el flujo completo se validó
+  end-to-end con Docker, el sitio real y Groq. No hay tests de integración automatizados contra
+  servicios reales (Qdrant servidor, Groq) en CI.
 
 ## 🔮 Futuras mejoras
 
