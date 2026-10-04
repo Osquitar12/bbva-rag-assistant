@@ -11,3 +11,4 @@ qdrant-client>=1.15,<2
 fastembed>=0.5,<1
 streamlit>=1.48,<2
 tenacity>=8.5,<10
+playwright>=1.49,<2

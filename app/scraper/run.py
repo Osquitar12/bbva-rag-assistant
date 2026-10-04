@@ -8,8 +8,8 @@ import logging
 from app.config import get_settings
 from app.logging_config import setup_logging
 from app.scraper.cleaner import HTMLCleaner
-from app.scraper.fetcher import PageFetcher
-from app.scraper.sitemap import discover_urls
+from app.scraper.fetcher import create_fetcher
+from app.scraper.sitemap import discover_urls, prioritize_entries
 from app.scraper.storage import LocalStorage
 
 logger = logging.getLogger("scraper")
@@ -23,13 +23,15 @@ def run_scraping(max_pages: int | None = None, force: bool | None = None) -> int
         logger.info("Ya existen datos limpios en %s; se omite el scraping (usa SCRAPE_FORCE=true)", s.clean_dir)
         return 0
 
+    fetcher = create_fetcher(s)
     entries = discover_urls(
         s.scrape_sitemap_url, s.scrape_base_url, s.scrape_user_agent,
         s.include_patterns, s.exclude_patterns, s.scrape_timeout_seconds,
-    )[: max_pages or s.scrape_max_pages]
+        fetch_text=fetcher.fetch_text,
+    )
+    entries = prioritize_entries(entries, s.priority_patterns)[: max_pages or s.scrape_max_pages]
     lastmods = {e.url: e.lastmod for e in entries}
 
-    fetcher = PageFetcher(s.scrape_user_agent, s.scrape_concurrency, s.scrape_delay_seconds, s.scrape_timeout_seconds)
     results = asyncio.run(fetcher.fetch_all([e.url for e in entries]))
 
     cleaner, saved, failed, empty = HTMLCleaner(), 0, 0, 0

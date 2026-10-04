@@ -15,6 +15,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Chromium (sin el headless shell) + librerías del sistema, para el scraper
+RUN playwright install --with-deps --no-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY app ./app
 COPY scripts ./scripts
 

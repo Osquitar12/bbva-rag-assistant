@@ -34,7 +34,7 @@ Todo el stack es **gratuito y open source / open-weights**, y se levanta con **u
 ```mermaid
 flowchart LR
     subgraph Ingesta["Ingesta (servicio ingest, una vez)"]
-        A[sitemap.xml + robots.txt] --> B[Fetcher async<br/>httpx + reintentos]
+        A[sitemap.xml + robots.txt] --> B[Fetcher async<br/>Chromium headless + reintentos]
         B --> C[(data/raw<br/>HTML crudo)]
         B --> D[Pipeline de limpieza<br/>Chain of Responsibility]
         D --> E[(data/clean<br/>JSON limpio)]
@@ -221,6 +221,8 @@ Todos los parámetros están externalizados (`app/config.py`, con `pydantic-sett
 | `QUERY_REWRITE_ENABLED` | `true` | Reformulación de preguntas de seguimiento |
 | `SCRAPE_MAX_PAGES` | `300` | Límite de páginas a scrapear |
 | `SCRAPE_CONCURRENCY` / `SCRAPE_DELAY_SECONDS` | `4` / `0.5` | Cortesía con el servidor |
+| `SCRAPE_FETCHER` | `browser` | `browser` = Chromium headless (Playwright), `http` = httpx puro |
+| `SCRAPE_PRIORITY_PATTERNS` | `/productos/` | Rutas que se descargan primero cuando el sitemap supera `SCRAPE_MAX_PAGES` |
 | `SCRAPE_INCLUDE_PATTERNS` / `SCRAPE_EXCLUDE_PATTERNS` | — / `/investor-relations/,...` | Filtros por ruta |
 | `SCRAPE_FORCE` / `REINDEX` | `false` | Forzar re-scraping / reindexación |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `150` | Chunking (en caracteres) |
@@ -262,7 +264,7 @@ lo que hace testeable todo el flujo con fakes.
 |---|---|---|
 | Lenguaje | **Python 3.12** | Requisito; ecosistema ML |
 | Descubrimiento de URLs | **sitemap.xml** + `urllib.robotparser` | El sitio publica un sitemap completo (~700 URLs), así que no hace falta un crawler. Es más rápido y más respetuoso, y aporta `lastmod` |
-| Descarga | **httpx async** + **tenacity** | Concurrencia limitada con semáforo, pausas entre peticiones y reintentos exponenciales ante 429/5xx |
+| Descarga | **Playwright** (Chromium headless) + **tenacity** | El WAF del sitio responde 403 a clientes HTTP que no son un navegador (httpx, curl), así que las páginas se piden con Chromium. Concurrencia limitada con semáforo, pausas entre peticiones y reintentos exponenciales ante 429/5xx. Con `SCRAPE_FETCHER=http` se usa httpx puro |
 | Extracción | **trafilatura** + **BeautifulSoup** | trafilatura es muy buena extrayendo el contenido principal de artículos; para páginas de producto basadas en componentes hay un fallback BS4. Se conservan los encabezados en Markdown para un chunking estructural |
 | Chunking | Propio: **por encabezados + recursivo** | Los chunks respetan secciones como "Beneficios" o "Requisitos", y cada uno lleva título y encabezado para dar contexto al embedding |
 | Embeddings | **fastembed** + `paraphrase-multilingual-MiniLM-L12-v2` | **Multilingüe** (el contenido es en español), ligero (220 MB, 384 dim) y en **ONNX sin PyTorch**, lo que ahorra ~2 GB en la imagen |
@@ -274,7 +276,7 @@ lo que hace testeable todo el flujo con fakes.
 | API | **FastAPI** | Validación con Pydantic, documentación OpenAPI automática y testeable |
 | UI | **Streamlit** | UI de chat funcional y limpia en pocas líneas, con gráficos nativos para las métricas |
 | Config | **pydantic-settings** | `.env` tipado y validado |
-| Tests | **pytest** | 32 tests sin red: Qdrant en memoria, SQLite en memoria, `httpx.MockTransport` y embeddings/LLM falsos |
+| Tests | **pytest** | 35 tests sin red: Qdrant en memoria, SQLite en memoria, `httpx.MockTransport` y embeddings/LLM falsos |
 
 ---
 
@@ -327,6 +329,10 @@ streamlit run app/ui/streamlit_app.py
   en inglés de "Atención al inversionista"), `/herramientas/` y formularios (simuladores sin texto
   útil). Se procesan como máximo 300 páginas por defecto para que el primer arranque sea razonable.
   Con `SCRAPE_MAX_PAGES=1000` se cubre todo el sitio.
+- **Descarga con navegador:** el sitio bloquea (403) las peticiones de clientes HTTP simples, por
+  lo que el scraper usa Chromium headless con un User-Agent identificable. Se sigue respetando
+  `robots.txt`, la concurrencia limitada y las pausas entre peticiones, y se guarda el HTML que
+  envía el servidor (no el DOM renderizado).
 - **Usuarios internos:** el asistente no maneja datos de clientes. Solo usa información pública
   del sitio, así que no se implementó autenticación.
 - **"Respondida" vs. "sin respuesta":** se detecta por la frase fija que el prompt obliga a usar

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
@@ -13,6 +14,9 @@ from app.exceptions import ScrapingError
 
 logger = logging.getLogger(__name__)
 _NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+
+# Devuelve el cuerpo de una URL o lanza ScrapingError
+TextFetcher = Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -68,14 +72,34 @@ def filter_entries(
     return result
 
 
-def _load_robots(client: httpx.Client, base_url: str) -> RobotFileParser | None:
+def prioritize_entries(entries: list[SitemapEntry], patterns: list[str]) -> list[SitemapEntry]:
+    """Pone primero las URLs que contienen algún patrón, conservando el orden del sitemap."""
+
+    def rank(entry: SitemapEntry) -> int:
+        path = urlparse(entry.url).path
+        return next((i for i, p in enumerate(patterns) if p in path), len(patterns))
+
+    return sorted(entries, key=rank)
+
+
+def _http_text_fetcher(client: httpx.Client) -> TextFetcher:
+    def fetch(url: str) -> str:
+        try:
+            resp = client.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ScrapingError(str(exc)) from exc
+        return resp.text
+
+    return fetch
+
+
+def _load_robots(fetch_text: TextFetcher, base_url: str) -> RobotFileParser | None:
     rp = RobotFileParser()
     try:
-        resp = client.get(f"{base_url.rstrip('/')}/robots.txt")
-        resp.raise_for_status()
-        rp.parse(resp.text.splitlines())
+        rp.parse(fetch_text(f"{base_url.rstrip('/')}/robots.txt").splitlines())
         return rp
-    except httpx.HTTPError as exc:
+    except ScrapingError as exc:
         logger.warning("No se pudo leer robots.txt (%s); se continúa sin él", exc)
         return None
 
@@ -87,25 +111,31 @@ def discover_urls(
     include: list[str],
     exclude: list[str],
     timeout: float = 20.0,
+    fetch_text: TextFetcher | None = None,
 ) -> list[SitemapEntry]:
-    headers = {"User-Agent": user_agent}
-    with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
-        robots = _load_robots(client, base_url)
-        pending, entries = [sitemap_url], []
-        visited: set[str] = set()
-        while pending:
-            sm = pending.pop()
-            if sm in visited:
-                continue
-            visited.add(sm)
-            try:
-                resp = client.get(sm)
-                resp.raise_for_status()
-            except httpx.HTTPError as exc:
-                raise ScrapingError(f"No se pudo descargar el sitemap {sm}: {exc}") from exc
-            found, children = parse_sitemap(resp.text)
-            entries.extend(found)
-            pending.extend(children)
+    """Si no se pasa `fetch_text`, robots.txt y los sitemaps se descargan con httpx."""
+    if fetch_text is None:
+        headers = {"User-Agent": user_agent}
+        with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
+            return discover_urls(
+                sitemap_url, base_url, user_agent, include, exclude, timeout, _http_text_fetcher(client)
+            )
+
+    robots = _load_robots(fetch_text, base_url)
+    pending, entries = [sitemap_url], []
+    visited: set[str] = set()
+    while pending:
+        sm = pending.pop()
+        if sm in visited:
+            continue
+        visited.add(sm)
+        try:
+            xml_text = fetch_text(sm)
+        except ScrapingError as exc:
+            raise ScrapingError(f"No se pudo descargar el sitemap {sm}: {exc}") from exc
+        found, children = parse_sitemap(xml_text)
+        entries.extend(found)
+        pending.extend(children)
     filtered = filter_entries(entries, include, exclude, robots, user_agent)
     logger.info("Sitemap: %d URLs encontradas, %d tras filtros", len(entries), len(filtered))
     return filtered

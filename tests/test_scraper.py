@@ -1,7 +1,18 @@
 from pathlib import Path
 
+import pytest
+
+from app.config import Settings
+from app.exceptions import ScrapingError
 from app.scraper.cleaner import HTMLCleaner, section_from_url
-from app.scraper.sitemap import filter_entries, parse_sitemap
+from app.scraper.fetcher import BrowserFetcher, PageFetcher, create_fetcher
+from app.scraper.sitemap import (
+    SitemapEntry,
+    discover_urls,
+    filter_entries,
+    parse_sitemap,
+    prioritize_entries,
+)
 from app.scraper.storage import LocalStorage, url_to_slug
 
 FIXTURE = Path(__file__).parent / "fixtures" / "product_page.html"
@@ -19,6 +30,35 @@ def test_parse_and_filter_sitemap():
     kept = filter_entries(entries, [], ["/investor-relations/"], None, "ua")
     assert [e.url for e in kept] == ["https://a.co/personas/x.html"]
     assert kept[0].lastmod == "2026-01-01"
+
+
+def test_discover_urls_with_injected_fetcher():
+    pages = {
+        "https://a.co/robots.txt": "User-agent: *\nDisallow: /personas/cards",
+        "https://a.co/sitemap.xml": """<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          <sitemap><loc>https://a.co/sm1.xml</loc></sitemap></sitemapindex>""",
+        "https://a.co/sm1.xml": """<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          <url><loc>https://a.co/personas/x.html</loc></url>
+          <url><loc>https://a.co/personas/cards/y.html</loc></url></urlset>""",
+    }
+    found = discover_urls(
+        "https://a.co/sitemap.xml", "https://a.co", "ua", [], [], fetch_text=pages.__getitem__
+    )
+    assert [e.url for e in found] == ["https://a.co/personas/x.html"]
+
+
+def test_prioritize_entries_keeps_sitemap_order_within_groups():
+    urls = ["https://a.co/blog/1.html", "https://a.co/productos/a.html",
+            "https://a.co/blog/2.html", "https://a.co/productos/b.html"]
+    ordered = prioritize_entries([SitemapEntry(u) for u in urls], ["/productos/"])
+    assert [e.url for e in ordered] == [urls[1], urls[3], urls[0], urls[2]]
+
+
+def test_create_fetcher_selects_strategy():
+    assert isinstance(create_fetcher(Settings(scrape_fetcher="browser")), BrowserFetcher)
+    assert isinstance(create_fetcher(Settings(scrape_fetcher="http")), PageFetcher)
+    with pytest.raises(ScrapingError):
+        create_fetcher(Settings(scrape_fetcher="otro"))
 
 
 def test_cleaner_removes_boilerplate_and_keeps_content():

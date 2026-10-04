@@ -1,6 +1,6 @@
 # ROADMAP: Sistema RAG BBVA Colombia (para ejecutar con Claude Code)
 
-> **Estado:** ✅ Fases 1–13 completadas (32 tests en verde). Pendiente: Fase 14 (prueba end-to-end local con Docker, Groq y el sitio real).
+> **Estado:** ✅ Fases 1–14 completadas (35 tests en verde). La prueba end-to-end obligó a descargar con Chromium headless (el WAF responde 403 a httpx) y a priorizar las páginas de productos.
 >
 > **Cómo usarlo:** abre Claude Code ahí y pégale el **Prompt inicial** (al final). Claude Code debe ejecutar **una fase a la vez**, verificarla y hacer **un commit por fase** con el mensaje indicado.
 

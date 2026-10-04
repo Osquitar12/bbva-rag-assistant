@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     scrape_concurrency: int = 4
     scrape_delay_seconds: float = 0.5
     scrape_timeout_seconds: float = 20.0
+    # browser = Chromium headless (Playwright) | http = httpx puro.
+    # El WAF de bbva.com.co responde 403 a clientes que no son un navegador.
+    scrape_fetcher: str = "browser"
     # UA de navegador + identificador propio: algunos WAF bloquean UAs no estándar
     scrape_user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -33,6 +36,9 @@ class Settings(BaseSettings):
     # Patrones de URL (substring) a incluir / excluir, separados por coma
     scrape_include_patterns: str = ""
     scrape_exclude_patterns: str = "/investor-relations/,/herramientas/,/landing/formulario"
+    # Las URLs que contengan estos patrones se descargan primero (importa cuando el
+    # sitemap tiene más páginas que SCRAPE_MAX_PAGES)
+    scrape_priority_patterns: str = "/productos/"
     scrape_force: bool = False
 
     # --- Chunking ---
@@ -104,6 +110,10 @@ class Settings(BaseSettings):
     @property
     def exclude_patterns(self) -> list[str]:
         return self._split(self.scrape_exclude_patterns)
+
+    @property
+    def priority_patterns(self) -> list[str]:
+        return self._split(self.scrape_priority_patterns)
 
 
 @lru_cache
