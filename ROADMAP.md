@@ -1,6 +1,6 @@
 # ROADMAP: Sistema RAG BBVA Colombia (para ejecutar con Claude Code)
 
-> **Estado:** ✅ Fases 1–4 completadas y commiteadas (configuración, scraper, limpieza, chunking, embeddings, Qdrant, 7 tests en verde). **Continuar desde la Fase 5.**
+> **Estado:** ✅ Fases 1–13 completadas (32 tests en verde). Pendiente: Fase 14 (prueba end-to-end local con Docker, Groq y el sitio real).
 >
 > **Cómo usarlo:** abre Claude Code ahí y pégale el **Prompt inicial** (al final). Claude Code debe ejecutar **una fase a la vez**, verificarla y hacer **un commit por fase** con el mensaje indicado.
 
@@ -114,25 +114,25 @@ bbva-rag/
 - Tests: chunker (tamaños, overlap, encabezados) y vectorstore con `QdrantClient(":memory:")` + un `FakeEmbedder` determinista.
 - Commit: `feat(ingestion): chunking estructural, embeddings multilingües e indexación en Qdrant`
 
-### Fase 5: Proveedores LLM (Strategy + Factory)
+### ✅ Fase 5: Proveedores LLM (Strategy + Factory)
 - `LLMProvider.generate(messages, model=None, temperature, max_tokens) -> str`. La base `OpenAICompatibleLLM` hace POST con httpx a `{base_url}/chat/completions`, con reintentos ante 429/5xx/timeout y `LLMError` con mensaje claro.
 - `GroqLLM` (si falta `GROQ_API_KEY`, lanza `LLMConfigurationError` con instrucciones) y `OllamaLLM`.
 - `LLMFactory.create(settings)` con registro `{"groq": GroqLLM, "ollama": OllamaLLM}`.
 - Tests con `httpx.MockTransport`.
 - Commit: `feat(rag): proveedores de LLM intercambiables (Groq/Ollama) con patrón Strategy y Factory`
 
-### Fase 6: Reranker (bonus)
+### ✅ Fase 6: Reranker (bonus)
 - `CrossEncoderReranker` (fastembed `TextCrossEncoder.rerank(query, docs)`), que reemplaza `score` y conserva `retrieval_score`. `NoOpReranker` recorta por similitud. `create_reranker(settings)`.
 - Si el modelo no carga (sin disco o red), se registra un warning y se usa `NoOpReranker`, sin romper.
 - Commit: `feat(rag): reranker cross-encoder multilingüe con degradación elegante`
 
-### Fase 7: Historial persistente (Repository)
+### ✅ Fase 7: Historial persistente (Repository)
 - Modelos: `Session(id, created_at, updated_at)`, `Message(id, session_id, role, content, created_at)`, `InteractionLog(id, session_id, message_id, question, rewritten_query, answer, answered: bool, latency_ms, retrieval_ms, generation_ms, top_score, sources_json, num_chunks, error, feedback: int|null, created_at)`.
 - `ConversationRepository`: `get_or_create_session`, `add_message`, `get_last_messages(session_id, n)` (los **N últimos** en orden cronológico), `list_sessions`, `get_history`, `log_interaction`, `set_feedback`, `iter_interactions`.
 - Tests con SQLite en memoria; verificar que la ventana N se respeta.
 - Commit: `feat(memory): historial de conversación persistente por session_id con patrón Repository`
 
-### Fase 8: RAGService (Facade)
+### ✅ Fase 8: RAGService (Facade)
 Flujo de `ask(session_id, question)`:
 1. Cargar los últimos `HISTORY_WINDOW_N` mensajes.
 2. Si hay historial y `QUERY_REWRITE_ENABLED`, **reformular** la pregunta en una consulta autónoma con `LLM_REWRITE_MODEL` (por ejemplo, "¿y cuál es la cuota de manejo?" pasa a "cuota de manejo tarjeta Visa Aqua BBVA"). Si falla, usar la original.
@@ -144,19 +144,19 @@ Flujo de `ask(session_id, question)`:
 - Test end-to-end con fakes (FakeEmbedder, FakeLLM, Qdrant `:memory:`, SQLite memoria), incluyendo un segundo turno que use la reformulación.
 - Commit: `feat(rag): servicio RAG como Facade con reformulación de consultas por historial`
 
-### Fase 9: API FastAPI
+### ✅ Fase 9: API FastAPI
 - `POST /chat {session_id?, message}` (genera UUID si no viene), `GET /sessions`, `GET /sessions/{id}/history`, `POST /feedback {interaction_id, value: 1|-1}`, `GET /metrics`, `GET /health` (Qdrant + nº de vectores + proveedor LLM).
 - Dependencias construidas una vez en `lifespan`. Handlers globales para `RAGError` → 503 y validación → 422.
 - Tests con `TestClient` y el servicio inyectado con fakes.
 - Commit: `feat(api): API REST con FastAPI para chat, sesiones, feedback y métricas`
 
-### Fase 10: UI Streamlit
+### ✅ Fase 10: UI Streamlit
 - Sidebar: ID de sesión (nuevo / elegir existente / pegar uno), botón "Nueva conversación", estado de `/health`.
 - Pestaña **Chat**: `st.chat_message`, fuentes en un expander con links y botones 👍/👎.
 - Pestaña **Métricas**: KPIs y gráficos nativos de Streamlit consumiendo `/metrics`.
 - Commit: `feat(ui): interfaz conversacional en Streamlit con selector de sesión y panel de métricas`
 
-### Fase 11: Analítica de conversaciones (requisito obligatorio)
+### ✅ Fase 11: Analítica de conversaciones (requisito obligatorio)
 `ConversationAnalytics` recorre `InteractionLog` + `Message` y devuelve un dict con:
 - **Uso:** total de sesiones, preguntas, promedio de turnos por sesión, preguntas por día y por hora (picos).
 - **Calidad:** tasa de respuesta (`answered`), tasa de "no encontré", tasa de error, top score promedio, % de feedback positivo.
@@ -169,7 +169,7 @@ Flujo de `ask(session_id, question)`:
 - Tests con datos sintéticos.
 - Commit: `feat(analytics): métricas de uso, calidad, rendimiento e impacto sobre el histórico`
 
-### Fase 12: Docker
+### ✅ Fase 12: Docker
 - **Un solo Dockerfile** (python:3.12-slim, `pip install --no-cache-dir`, usuario no root) para todos los servicios.
 - `docker-compose.yml`:
   - `qdrant` (`qdrant/qdrant`, volumen `qdrant_data`, healthcheck).
@@ -181,7 +181,7 @@ Flujo de `ask(session_id, question)`:
 - `.dockerignore`.
 - Commit: `chore(docker): Dockerfile y docker-compose para levantar todo con un solo comando`
 
-### Fase 13: README y cierre
+### ✅ Fase 13: README y cierre
 README en español con: descripción, diagrama de arquitectura (Mermaid), requisitos previos (Docker, API key de Groq gratis, espacio en disco aproximado), pasos (clonar → `cp .env.example .env` → poner key → `docker compose up --build` → abrir http://localhost:8501), primer arranque (scraping de 5–10 min), uso de la UI y de la API (ejemplos curl), tabla de variables de entorno, **patrones de diseño (cuál, dónde y por qué)**, stack con justificación, cómo correr tests y la analítica, **supuestos asumidos**, **limitaciones conocidas** (contenido renderizado por JS no capturado, simuladores sin texto, PDFs no procesados, tasas pueden quedar desactualizadas, límite de páginas, rate limit del tier gratis de Groq, detección de "no respuesta" basada en frase fija), y **futuras mejoras** (búsqueda híbrida BM25 + densa, re-scraping incremental por `lastmod`, evaluación con RAGAS, PDFs, streaming, auth, Postgres, observabilidad con Langfuse, caché semántica).
 - Commit: `docs: README completo con instalación, arquitectura, patrones y limitaciones`
 
