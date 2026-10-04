@@ -16,6 +16,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app ./app
+COPY scripts ./scripts
 
 RUN mkdir -p /app/data/raw /app/data/clean /app/.cache/models
 
