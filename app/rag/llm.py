@@ -93,12 +93,20 @@ class OpenAICompatibleLLM(LLMProvider):
 class GroqLLM(OpenAICompatibleLLM):
     name = "groq"
 
-    def __init__(self, api_key: str, **kwargs):
+    def __init__(self, api_key: str, reasoning_effort: str = "low", **kwargs):
         if not api_key:
             raise LLMConfigurationError(
                 "Falta GROQ_API_KEY. Crea una gratis en https://console.groq.com/keys y ponla en el archivo .env"
             )
         super().__init__(api_key=api_key, **kwargs)
+        self.reasoning_effort = reasoning_effort
+
+    def _payload(self, messages, model, temperature, max_tokens) -> dict:
+        payload = super()._payload(messages, model, temperature, max_tokens)
+        # Los modelos gpt-oss razonan antes de responder: esfuerzo bajo = menos latencia/tokens
+        if "gpt-oss" in payload["model"] and self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
+        return payload
 
 
 class OllamaLLM(OpenAICompatibleLLM):
@@ -126,7 +134,10 @@ class LLMFactory:
             transport=transport,
         )
         if name == "groq":
-            return GroqLLM(api_key=settings.groq_api_key, base_url=settings.groq_base_url, **common)
+            return GroqLLM(
+                api_key=settings.groq_api_key, base_url=settings.groq_base_url,
+                reasoning_effort=settings.llm_reasoning_effort, **common,
+            )
         if name == "ollama":
             return OllamaLLM(base_url=settings.ollama_base_url, **common)
         if name in cls._registry:

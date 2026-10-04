@@ -49,16 +49,17 @@ class Settings(BaseSettings):
     rerank_top_n: int = 4
     reranker_enabled: bool = True
     reranker_model: str = "jinaai/jina-reranker-v2-base-multilingual"
-    min_relevance_score: float = Field(
-        default=0.0, description="Umbral mínimo de score (rerank o similitud) para usar un chunk"
-    )
+    # Umbral mínimo de score para usar un chunk. Vacío = sin umbral (los scores del
+    # cross-encoder son logits y pueden ser negativos, por eso no hay umbral por defecto)
+    min_relevance_score: float | None = Field(default=None)
 
     # --- LLM ---
     llm_provider: str = "groq"  # groq | ollama
     llm_model: str = "openai/gpt-oss-120b"
     llm_rewrite_model: str = "openai/gpt-oss-20b"
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 800
+    llm_max_tokens: int = 1500
+    llm_reasoning_effort: str = "low"  # solo modelos gpt-oss en Groq
     llm_timeout_seconds: float = 60.0
     llm_max_retries: int = 3
     groq_api_key: str = ""
